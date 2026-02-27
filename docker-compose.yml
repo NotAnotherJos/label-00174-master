@@ -1,0 +1,59 @@
+# 报文自动批阅工具 - Docker Compose 配置
+# 使用方法: docker-compose up --build -d
+
+services:
+  # 后端服务 - FastAPI + PaddleOCR
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: message-review-backend
+    restart: unless-stopped
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # 挂载上传目录，持久化存储
+      - backend_uploads:/app/uploads
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - message-review-network
+
+  # 前端管理后台 - Vue.js + Nginx
+  frontend-admin:
+    build:
+      context: ./frontend-admin
+      dockerfile: Dockerfile
+    container_name: message-review-frontend
+    restart: unless-stopped
+    ports:
+      - "8083:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - message-review-network
+
+# 网络配置
+networks:
+  message-review-network:
+    driver: bridge
+
+# 数据卷配置
+volumes:
+  backend_uploads:
+    driver: local
